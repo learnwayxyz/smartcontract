@@ -1,0 +1,34 @@
+A: Participant {
+  shape: person
+  style.multiple: true
+}
+B: Question {
+  shape: document
+  style.multiple: true
+}
+C: Option {
+  shape: package
+  style.multiple: true
+}
+D: Answer {
+  shape: page
+}
+E: Quiz {
+  shape: parallelogram
+}
+F: Operator {
+  shape: person
+}
+G: Master {
+  shape: cloud
+  style.multiple: true
+}
+
+F -> E: creates quiz (1)
+F -> A: invite participants (2)
+A -> D: provides answer (3)
+D -> B: answer has a question (3a)
+D -> C: answer must be part \n of the options (3b)
+B <- C: question has options (3c)
+G -> E: decides quiz winners (4)
+E <- B: quiz has questions (3d)
