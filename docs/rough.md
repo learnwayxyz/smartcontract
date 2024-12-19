@@ -4,7 +4,7 @@
 - In simple terms, there is a quiz and there are multiple participants of the quiz.
 - At the end of the quiz the top winners get a prize.
 - The interesting part is that, to participate in a quiz, one must stake a given amount.
-- Aside quizes there are lessons that one can take 
+- Aside quizes there are lessons that one can take
 
 ## Functional Requirements
 
@@ -124,7 +124,11 @@
 
 Top-level components of the learnway backend system.
 
-1. Quiz Master
+![Entity Relation Diagram](./system.png)
+
+1. Quiz Master Backend
+2. Staking & Prize Distribution Contract
+3. Mobile App
 
 ## Spec
 

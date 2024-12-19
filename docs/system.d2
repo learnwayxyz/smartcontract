@@ -1,0 +1,18 @@
+A: Quiz Master Backend Master {
+  shape: cloud
+  style.multiple: true
+}
+B: Staking & Prize Distribution Contract {
+  shape: document
+  style.multiple: true
+}
+C: Mobile App {
+  shape: image
+  icon: https://icons.terrastruct.com/tech%2F052-smartphone-3.svg
+}
+
+C -> A: Interact with backend to initialize quiz \n(1)
+A -> B: Interact with contract to initialize quiz \n(2)
+C -> B: Other participants stake on contract to join quiz \n(3)
+A -> B: Sends results of quiz to contract on completion \n(5)
+C -> A: Quiz is conducted (4)
