@@ -60,6 +60,10 @@
 - End Quiz: How to end a  quiz.
 - Evaluate Quiz: How will the quiz be evaluated after it has ended.
 
+#### Quiz Flow Diagram
+
+![Quiz Flow Diagram](./flow.png)
+
 #### Authenticate
 
 #### Learn & Earn
@@ -99,7 +103,6 @@
 1. Must be signend in.
 2. Quiz must already be started.
 3. Provide answer for each question.
-4. 
 
 #### Cancel Quiz
 
@@ -132,47 +135,16 @@ Top-level components of the learnway backend system.
 
 ## Spec
 
-In-depth protocol spec for data types, functional logic, backend and smart contract.
-
-### Question
-
-```typescript
-type Option = string;
-type Question = {
-  question: string, // actual question
-  options: Option[]
-};
-```
+In-depth protocol spec for data types, functional logic, smart contract.
 
 ### Quiz
 
 ```typescript
 type Quiz = {
-  topic: string, // from a list of predetermined topics
-  questions: Question,
-};
-```
-
-### Answer
-
-```typescript
-type Answer = {
-  questionId: string, // 
-  answer: string, // 
-};
-
-type Submission = {
-  quizId: string, //
-  answers: Answer[] // 
-}
-```
-
-### Participant
-
-```typescript
-type Participant = {
-  address: string, //
-  quizId: string, //
-  submission: Submission
+  hash: string, // a hash representing the quiz offchian
+  startTime: number, // set when quiz starts
+  duration: number, // how long quiz will take after start
+  entryFee: number, // how much one needs to pay to join pool
+  minStartTime: number, // the least time the quiz can start.
 };
 ```
