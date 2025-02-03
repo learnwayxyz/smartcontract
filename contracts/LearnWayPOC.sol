@@ -30,6 +30,7 @@ contract LearnWayPOC is Ownable {
         uint256 totalStake;
         uint256 entryFee;
         address topScorer;
+        address operator;
         uint256 joinTime;
         uint256 endTime;
         uint256 submitTime;
@@ -59,7 +60,15 @@ contract LearnWayPOC is Ownable {
         feeAddress = msg.sender;
     }
 
-    event QuizOpened(bytes32 quizHash, QuizState state);
+    event QuizOpened(
+        bytes32 quizHash,
+        QuizState state,
+        address operator,
+        uint256 entryFee,
+        uint256 joinTime,
+        uint256 endTime,
+        uint256 submitTime
+    );
     event QuizClosed(
         bytes32 quizHash,
         QuizState state,
@@ -147,14 +156,24 @@ contract LearnWayPOC is Ownable {
             entryFee,
             entryFee,
             address(0),
+            msg.sender,
             block.timestamp + joinPeriod,
             block.timestamp + joinPeriod + quizDuration,
-            block.timestamp + joinPeriod + submitPeriod + quizDuration,
+            block.timestamp + joinPeriod + quizDuration + submitPeriod,
             QuizState.open,
             _quizHash
         );
         participants[_quizHash][msg.sender] = Participant(true, 0);
-        emit QuizOpened(_quizHash, _quizState(_quizHash));
+        _deposit(entryFee);
+        emit QuizOpened(
+            _quizHash,
+            _quizState(_quizHash),
+            quizzes[_quizHash].operator,
+            quizzes[_quizHash].entryFee,
+            quizzes[_quizHash].joinTime,
+            quizzes[_quizHash].endTime,
+            quizzes[_quizHash].submitTime
+        );
     }
 
     function joinQuiz(
@@ -167,7 +186,9 @@ contract LearnWayPOC is Ownable {
     {
         quizzes[_quizHash].participants += 1;
         quizzes[_quizHash].totalStake += quizzes[_quizHash].entryFee;
+        participants[_quizHash][msg.sender] = Participant(true, 0);
         _deposit(quizzes[_quizHash].entryFee);
+        emit PartipantJoined(_quizHash, _quizState(_quizHash), msg.sender);
     }
 
     function submitScore(
@@ -186,10 +207,11 @@ contract LearnWayPOC is Ownable {
         participants[_quizHash][msg.sender].score = _score;
         if (_score > quizzes[_quizHash].highestScore) {
             quizzes[_quizHash].highestScore = _score;
+            quizzes[_quizHash].topScorer = msg.sender;
         }
         emit PartipantEvaluated(
             _quizHash,
-            quizzes[_quizHash].state,
+            _quizState(_quizHash),
             msg.sender,
             _score
         );
@@ -209,7 +231,7 @@ contract LearnWayPOC is Ownable {
         _withdraw(won, quizzes[_quizHash].topScorer);
         emit QuizClosed(
             _quizHash,
-            quizzes[_quizHash].state,
+            _quizState(_quizHash),
             quizzes[_quizHash].topScorer,
             won,
             fee
