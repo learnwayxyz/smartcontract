@@ -27,7 +27,7 @@ contract LearnWay is Ownable {
         address operator;
         bool whitelist;
         QuizState state;
-        bytes offchianHash;
+        bytes32 offchianHash;
     }
 
     struct Participant {
@@ -41,9 +41,9 @@ contract LearnWay is Ownable {
     address public quizMaster;
     IERC20 public lwt;
 
-    mapping(bytes => Quiz) quizzes;
-    mapping(bytes => mapping(address => Participant)) internal participants;
-    mapping(bytes => mapping(address => Participant)) internal whitelists;
+    mapping(bytes32 => Quiz) quizzes; // quiz hash -> quiz
+    mapping(bytes32 => mapping(address => Participant)) public participants; // quiz hash -> address -> participant
+    mapping(bytes32 => mapping(address => Participant)) public whitelists; // quiz hash -> address -> participant
 
     constructor(
         address _lwtAddress,
@@ -62,7 +62,7 @@ contract LearnWay is Ownable {
     event QuizCancelled(bytes indexed _quizHash);
     event QuizUpdated(bytes indexed _quizHash);
     event PartipantEvaluated(
-        bytes indexed _quizHash,
+        bytes32 indexed _quizHash,
         address indexed _participant,
         uint256 _score,
         uint256 _won
@@ -98,28 +98,28 @@ contract LearnWay is Ownable {
         _;
     }
 
-    modifier existingQuiz(bytes calldata _quizHash) {
+    modifier existingQuiz(bytes32 _quizHash) {
         if (quizzes[_quizHash].minStartTime == 0) {
             revert QuizMissing();
         }
         _;
     }
 
-    modifier newQuiz(bytes calldata _quizHash) {
+    modifier newQuiz(bytes32 _quizHash) {
         if (quizzes[_quizHash].minStartTime > 0) {
             revert QuizExists();
         }
         _;
     }
 
-    modifier onlyOperator(bytes calldata _quizHash) {
+    modifier onlyOperator(bytes32 _quizHash) {
         if (quizzes[_quizHash].operator != msg.sender) {
             revert InvalidPermission("onlyOperator");
         }
         _;
     }
 
-    modifier quizInState(bytes calldata _quizHash, QuizState _state) {
+    modifier quizInState(bytes32 _quizHash, QuizState _state) {
         if (_quizState(_quizHash) != _state) {
             revert InvalidState(_quizState(_quizHash));
         }
@@ -137,7 +137,7 @@ contract LearnWay is Ownable {
     }
 
     function _quizState(
-        bytes calldata _quizHash
+        bytes32 _quizHash
     ) internal view returns (QuizState _state) {
         if (quizzes[_quizHash].state == QuizState.ongoing) {
             if (
@@ -177,7 +177,7 @@ contract LearnWay is Ownable {
     }
 
     function setupQuiz(
-        bytes calldata _quizHash,
+        bytes32 _quizHash,
         uint256 _minStartTime,
         uint256 _duration,
         uint256 _entryFee,
@@ -188,7 +188,7 @@ contract LearnWay is Ownable {
     ) external newQuiz(_quizHash) {}
 
     function updateQuiz(
-        bytes calldata _quizHash,
+        bytes32 _quizHash,
         uint256 _minStartTime,
         uint256 _duration,
         uint256 _entryFee,
@@ -207,37 +207,34 @@ contract LearnWay is Ownable {
         nonZero(_maxParticipants)
     {}
 
-    function joinQuiz(
-        bytes calldata _quizHash
-    ) external existingQuiz(_quizHash) {}
+    function joinQuiz(bytes32 _quizHash) external existingQuiz(_quizHash) {}
 
     function cancelQuiz(
-        bytes calldata _quizHash
+        bytes32 _quizHash
     ) external onlyOperator(_quizHash) existingQuiz(_quizHash) {}
 
-    // @dev _evaluation = (address,uint256,uint256)
-    function evaluateQuiz(
-        bytes calldata _quizHash,
-        bytes[] calldata _evaluation
-    ) external onlyQuizMaster existingQuiz(_quizHash) {
-        for (uint i = 0; i < _evaluation.length; i++) {
-            (address player, uint256 score, uint256 won) = abi.decode(
-                _evaluation[i],
-                (address, uint256, uint256)
-            );
-            if (participants[_quizHash][player].playing) {
-                participants[_quizHash][player] = Participant(true, score, won);
-                emit PartipantEvaluated(_quizHash, player, score, won);
-            }
-        }
-    }
+    // function evaluateQuiz(
+    //     bytes32 _quizHash,
+    //     bytes[] calldata _evaluation
+    // ) external onlyQuizMaster existingQuiz(_quizHash) {
+    //     for (uint i = 0; i < _evaluation.length; i++) {
+    //         (address player, uint256 score, uint256 won) = abi.decode(
+    //             _evaluation[i],
+    //             (address, uint256, uint256)
+    //         );
+    //         if (participants[_quizHash][player].playing) {
+    //             participants[_quizHash][player] = Participant(true, score, won);
+    //             emit PartipantEvaluated(_quizHash, player, score, won);
+    //         }
+    //     }
+    // }
 
     function setWhitelist(
-        bytes calldata _quizHash
+        bytes32 _quizHash
     ) external onlyOperator(_quizHash) existingQuiz(_quizHash) {}
 
     function overrideOperator(
-        bytes calldata _quizHash
+        bytes32 _quizHash
     ) external onlyQuizMaster existingQuiz(_quizHash) {
         quizzes[_quizHash].operator = quizMaster;
     }
