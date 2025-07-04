@@ -3,79 +3,109 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-contract LearnWay is Ownable {
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
+/**
+ * @author  .
+ * @title   Learn Way Contract
+ * @dev     Only meant to used in proof of concept and to speed up frontend integration
+ * @notice  Little security considerations made and lots of concepts stripped off for simplicity
+ */
+
+contract LearnWay is Initializable {
     enum QuizState {
         open,
-        closed,
         ongoing,
-        timeout,
+        closed,
         cancelled
     }
 
     struct Quiz {
-        uint256 startTime;
-        uint256 minStartTime;
-        uint256 duration;
+        uint256 participants;
+        uint256 highestScore;
+        uint256 totalStake;
         uint256 entryFee;
-        uint256 maxParticipants;
-        uint256 maxScore;
+        address topScorer;
         address operator;
-        bool whitelist;
         QuizState state;
         bytes32 offchianHash;
+        uint256 submissions;
     }
 
     struct Participant {
         bool playing;
         uint256 score;
-        uint256 won;
     }
 
-    uint256 public adminFeeBps = 500;
+    uint256 public adminFeeBps;
+    uint256 public entryFee;
+    uint256 public maxQuizDuration;
+    uint256 public accumulatedFee;
     address public feeAddress;
-    address public quizMaster;
     IERC20 public lwt;
 
-    mapping(bytes32 => Quiz) quizzes; // quiz hash -> quiz
-    mapping(bytes32 => mapping(address => Participant)) public participants; // quiz hash -> address -> participant
-    mapping(bytes32 => mapping(address => Participant)) public whitelists; // quiz hash -> address -> participant
+    mapping(bytes32 => Quiz) public quizzes;
+    mapping(bytes32 => mapping(address => Participant)) public participants;
 
-    constructor(
-        address _lwtAddress,
-        address _feeAddress,
-        address _quizMaster,
-        uint256 _adminFeeBps
-    ) Ownable(msg.sender) {
+    function initialize(address _lwtAddress) public initializer {
+        adminFeeBps = 500;
+        entryFee = 50e18;
+        maxQuizDuration = 15 minutes;
+        accumulatedFee = 0;
         lwt = IERC20(_lwtAddress);
-        feeAddress = _feeAddress;
-        quizMaster = _quizMaster;
-        adminFeeBps = _adminFeeBps;
+        feeAddress = msg.sender;
     }
 
-    event QuizOpened(bytes indexed _quizHash);
-    event QuizClosed(bytes indexed _quizHash);
-    event QuizCancelled(bytes indexed _quizHash);
-    event QuizUpdated(bytes indexed _quizHash);
+    event QuizOpened(
+        bytes32 quizHash,
+        QuizState state,
+        address operator,
+        uint256 entryFee
+    );
+    event QuizStarted(bytes32 quizHash, QuizState state, address starter);
+    event QuizClosed(
+        bytes32 quizHash,
+        QuizState state,
+        address winner,
+        uint256 won,
+        uint256 fee
+    );
+    event QuizCancelled(
+        bytes32 quizHash,
+        QuizState state,
+        address winner,
+        uint256 won,
+        uint256 fee
+    );
+    event PartipantJoined(
+        bytes32 quizHash,
+        QuizState state,
+        address participant
+    );
     event PartipantEvaluated(
-        bytes32 indexed _quizHash,
-        address indexed _participant,
-        uint256 _score,
-        uint256 _won
+        bytes32 quizHash,
+        QuizState state,
+        address participant,
+        uint256 score
     );
 
-    error ProtocolInvariantCheckFailed();
-    error InvalidChallenge();
+    error InvariantCheckFailed();
     error InvalidState(QuizState _state);
     error ZeroAddress();
     error ZeroNumber();
     error QuizExists();
     error QuizMissing();
-    error InvalidPermission(string _msg);
+    error NotParticipant();
+    error IsParticipant();
+    error ParticipantAlreadySubmitted();
+    error InvalidWinner();
+    error InvalidTotalStake();
+    error MustBeOperator();
+    error QuizHasParticipants();
 
     modifier nonZero(uint256 num) {
         if (num == 0) {
@@ -91,30 +121,16 @@ contract LearnWay is Ownable {
         _;
     }
 
-    modifier onlyQuizMaster() {
-        if (msg.sender != quizMaster) {
-            revert InvalidPermission("onlyQuizMaster");
-        }
-        _;
-    }
-
     modifier existingQuiz(bytes32 _quizHash) {
-        if (quizzes[_quizHash].minStartTime == 0) {
+        if (quizzes[_quizHash].participants == 0) {
             revert QuizMissing();
         }
         _;
     }
 
     modifier newQuiz(bytes32 _quizHash) {
-        if (quizzes[_quizHash].minStartTime > 0) {
+        if (quizzes[_quizHash].participants > 0) {
             revert QuizExists();
-        }
-        _;
-    }
-
-    modifier onlyOperator(bytes32 _quizHash) {
-        if (quizzes[_quizHash].operator != msg.sender) {
-            revert InvalidPermission("onlyOperator");
         }
         _;
     }
@@ -126,31 +142,190 @@ contract LearnWay is Ownable {
         _;
     }
 
-    // @dev computes fraction of [value] in [bps]
-    // 100 bps is equivalent to 1%
-    function _basisPoint(
-        uint256 value,
-        uint256 bps
-    ) internal pure returns (uint256) {
-        require((value * bps) >= 10_000);
-        return Math.mulDiv(value, bps, 10_000);
+    modifier notParticipant(bytes32 _quizHash, address addr) {
+        if (participants[_quizHash][addr].playing) {
+            revert IsParticipant();
+        }
+        _;
+    }
+
+    modifier isParticipant(bytes32 _quizHash, address addr) {
+        if (!participants[_quizHash][addr].playing) {
+            revert NotParticipant();
+        }
+        _;
+    }
+
+    /**
+     * @notice  .
+     * @dev     create a new quiz, will deduct entry fee
+     * @param   _quizHash  .
+     */
+    function createQuiz(bytes32 _quizHash) external newQuiz(_quizHash) {
+        quizzes[_quizHash] = Quiz(
+            1,
+            0,
+            entryFee,
+            entryFee,
+            address(0),
+            msg.sender,
+            QuizState.open,
+            _quizHash,
+            0
+        );
+        participants[_quizHash][msg.sender] = Participant(true, 0);
+        _deposit(entryFee);
+        emit QuizOpened(
+            _quizHash,
+            _quizState(_quizHash),
+            quizzes[_quizHash].operator,
+            quizzes[_quizHash].entryFee
+        );
+    }
+
+    /**
+     * @notice  .
+     * @dev     start quiz after people have joined.
+     * @param   _quizHash  .
+     */
+    function startQuiz(
+        bytes32 _quizHash
+    )
+        external
+        existingQuiz(_quizHash)
+        quizInState(_quizHash, QuizState.open)
+        isParticipant(_quizHash, msg.sender)
+    {
+        quizzes[_quizHash].state = QuizState.ongoing;
+        emit QuizStarted(_quizHash, quizzes[_quizHash].state, msg.sender);
+    }
+
+    /**
+     * @notice  .
+     * @dev     join quiz after invited, will deduct entry fee
+     * @param   _quizHash  .
+     */
+    function joinQuiz(
+        bytes32 _quizHash
+    )
+        external
+        existingQuiz(_quizHash)
+        quizInState(_quizHash, QuizState.open)
+        notParticipant(_quizHash, msg.sender)
+    {
+        quizzes[_quizHash].participants += 1;
+        quizzes[_quizHash].totalStake += quizzes[_quizHash].entryFee;
+        participants[_quizHash][msg.sender] = Participant(true, 0);
+        _deposit(quizzes[_quizHash].entryFee);
+        emit PartipantJoined(_quizHash, _quizState(_quizHash), msg.sender);
+    }
+
+    /**
+     * @notice  .
+     * @dev     .
+     * @param   _quizHash  .
+     * @param   _score  .
+     * TODO: later change this to owner, only learnway backend can submit score
+     */
+    function submitScore(
+        bytes32 _quizHash,
+        uint256 _score
+    )
+        external
+        existingQuiz(_quizHash)
+        nonZero(_score)
+        quizInState(_quizHash, QuizState.ongoing)
+        isParticipant(_quizHash, msg.sender)
+    {
+        if (participants[_quizHash][msg.sender].score > 0) {
+            revert ParticipantAlreadySubmitted();
+        }
+        quizzes[_quizHash].submissions += 1;
+        participants[_quizHash][msg.sender].score = _score;
+        if (_score > quizzes[_quizHash].highestScore) {
+            quizzes[_quizHash].highestScore = _score;
+            quizzes[_quizHash].topScorer = msg.sender;
+        }
+        emit PartipantEvaluated(
+            _quizHash,
+            _quizState(_quizHash),
+            msg.sender,
+            _score
+        );
+        if (quizzes[_quizHash].submissions == quizzes[_quizHash].participants) {
+            closeQuiz(_quizHash);
+        }
+    }
+
+    /**
+     * @notice  .
+     * @dev     close the quiz.
+     * @param   _quizHash  .
+     * TODO: later change this to owner, only learnway backend can close quiz
+     */
+    function closeQuiz(
+        bytes32 _quizHash
+    ) public quizInState(_quizHash, QuizState.ongoing) {
+        quizzes[_quizHash].state = QuizState.closed;
+        if (quizzes[_quizHash].topScorer == address(0)) {
+            revert InvalidWinner();
+        }
+        if (quizzes[_quizHash].totalStake == 0) {
+            revert InvalidTotalStake();
+        }
+        (uint256 fee, uint256 won) = _deductFee(quizzes[_quizHash].totalStake);
+        _withdraw(won, quizzes[_quizHash].topScorer);
+        emit QuizClosed(
+            _quizHash,
+            _quizState(_quizHash),
+            quizzes[_quizHash].topScorer,
+            won,
+            fee
+        );
+    }
+
+    /**
+     * @notice  .
+     * @dev     cancel the quiz, if no one joins.
+     * @param   _quizHash  .
+     * TODO: later change this to owner, only learnway backend can close quiz
+     */
+    function cancelQuiz(
+        bytes32 _quizHash
+    ) external quizInState(_quizHash, QuizState.open) {
+        quizzes[_quizHash].state = QuizState.cancelled;
+        if (quizzes[_quizHash].participants > 1) {
+            revert QuizHasParticipants();
+        }
+        if (quizzes[_quizHash].operator != msg.sender) {
+            revert MustBeOperator();
+        }
+        if (quizzes[_quizHash].totalStake == 0) {
+            revert InvalidTotalStake();
+        }
+        (uint256 fee, uint256 won) = _deductFee(quizzes[_quizHash].totalStake);
+        _withdraw(won, quizzes[_quizHash].operator);
+        emit QuizCancelled(
+            _quizHash,
+            _quizState(_quizHash),
+            quizzes[_quizHash].topScorer,
+            won,
+            fee
+        );
+    }
+
+    function _deductFee(
+        uint256 _amount
+    ) internal returns (uint256 fee, uint256 remainder) {
+        fee = _basisPoint(_amount, adminFeeBps);
+        accumulatedFee += fee;
+        remainder = _amount - fee;
     }
 
     function _quizState(
         bytes32 _quizHash
     ) internal view returns (QuizState _state) {
-        if (quizzes[_quizHash].state == QuizState.ongoing) {
-            if (
-                block.timestamp <
-                quizzes[_quizHash].startTime + quizzes[_quizHash].duration
-            ) {
-                return QuizState.ongoing;
-            } else {
-                return QuizState.timeout;
-            }
-        } else {
-            return quizzes[_quizHash].state;
-        }
+        return quizzes[_quizHash].state;
     }
 
     function _deposit(uint256 _amt) internal {
@@ -163,97 +338,26 @@ contract LearnWay is Ownable {
         );
         uint256 balanceAfter = IERC20(lwt).balanceOf(address(this));
         if ((balanceAfter - balanceBefore) != _amt) {
-            revert ProtocolInvariantCheckFailed();
+            revert InvariantCheckFailed();
         }
     }
 
-    function _withdraw(uint256 _amt) internal {
+    function _withdraw(uint256 _amt, address _to) internal {
         uint256 balanceBefore = IERC20(lwt).balanceOf(address(this));
-        SafeERC20.safeTransfer(IERC20(lwt), msg.sender, _amt);
+        SafeERC20.safeTransfer(IERC20(lwt), _to, _amt);
         uint256 balanceAfter = IERC20(lwt).balanceOf(address(this));
         if ((balanceBefore - balanceAfter) != _amt) {
-            revert ProtocolInvariantCheckFailed();
+            revert InvariantCheckFailed();
         }
     }
 
-    function setupQuiz(
-        bytes32 _quizHash,
-        uint256 _minStartTime,
-        uint256 _duration,
-        uint256 _entryFee,
-        uint256 _maxScore,
-        uint256 _maxParticipants,
-        bool _whitelist,
-        address _operator
-    ) external newQuiz(_quizHash) {}
-
-    function updateQuiz(
-        bytes32 _quizHash,
-        uint256 _minStartTime,
-        uint256 _duration,
-        uint256 _entryFee,
-        uint256 _maxScore,
-        uint256 _maxParticipants,
-        bool _whitelist,
-        address _operator
-    )
-        external
-        onlyOperator(_quizHash)
-        existingQuiz(_quizHash)
-        nonZero(_minStartTime)
-        nonZero(_duration)
-        nonZero(_entryFee)
-        nonZero(_maxScore)
-        nonZero(_maxParticipants)
-    {}
-
-    function joinQuiz(bytes32 _quizHash) external existingQuiz(_quizHash) {}
-
-    function cancelQuiz(
-        bytes32 _quizHash
-    ) external onlyOperator(_quizHash) existingQuiz(_quizHash) {}
-
-    // function evaluateQuiz(
-    //     bytes32 _quizHash,
-    //     bytes[] calldata _evaluation
-    // ) external onlyQuizMaster existingQuiz(_quizHash) {
-    //     for (uint i = 0; i < _evaluation.length; i++) {
-    //         (address player, uint256 score, uint256 won) = abi.decode(
-    //             _evaluation[i],
-    //             (address, uint256, uint256)
-    //         );
-    //         if (participants[_quizHash][player].playing) {
-    //             participants[_quizHash][player] = Participant(true, score, won);
-    //             emit PartipantEvaluated(_quizHash, player, score, won);
-    //         }
-    //     }
-    // }
-
-    function setWhitelist(
-        bytes32 _quizHash
-    ) external onlyOperator(_quizHash) existingQuiz(_quizHash) {}
-
-    function overrideOperator(
-        bytes32 _quizHash
-    ) external onlyQuizMaster existingQuiz(_quizHash) {
-        quizzes[_quizHash].operator = quizMaster;
-    }
-
-    function setFeeAddress(
-        address _feeAddress
-    ) external onlyOwner nonZeroAddress(_feeAddress) {
-        feeAddress = _feeAddress;
-    }
-
-    function setQuizMaster(
-        address _quizMaster
-    ) external onlyOwner nonZeroAddress(_quizMaster) {
-        quizMaster = _quizMaster;
-    }
-
-    function setAdminFeeBps(
-        uint256 _adminFeeBps
-    ) external onlyOwner nonZero(_adminFeeBps) {
-        adminFeeBps = _adminFeeBps;
+    // @dev computes fraction of [value] in [bps]
+    // 100 bps is equivalent to 1%
+    function _basisPoint(
+        uint256 value,
+        uint256 bps
+    ) internal pure returns (uint256) {
+        require((value * bps) >= 10_000);
+        return Math.mulDiv(value, bps, 10_000);
     }
 }
