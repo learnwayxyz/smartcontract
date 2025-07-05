@@ -1,6 +1,6 @@
-import { zeroAddress } from './../node_modules/ethereumjs-util/src/account';
-import { bigint } from './../node_modules/micro-packed/src/index';
-import { LearnWay } from './../typechain-types/contracts/LearnWay';
+import { zeroAddress } from "./../node_modules/ethereumjs-util/src/account";
+import { bigint } from "./../node_modules/micro-packed/src/index";
+import { LearnWay } from "./../typechain-types/contracts/LearnWay";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { assert, expect } from "chai";
 import { ethers } from "hardhat";
@@ -16,15 +16,9 @@ export async function deployLearnWay() {
   const faucet = await LearnWayFaucet.deploy(learnWayToken);
 
   await learnWayToken.transfer(await faucet.getAddress(), BigInt(1e24));
-  await learnWayToken.transfer(
-    await user1.getAddress(),
-    BigInt(50e18)
-  );
-  
-  await learnWayToken.transfer(
-    await user2.getAddress(),
-    BigInt(50e18)
-  );
+  await learnWayToken.transfer(await user1.getAddress(), BigInt(50e18));
+
+  await learnWayToken.transfer(await user2.getAddress(), BigInt(50e18));
 
   await learnWayToken.transfer(await user3.getAddress(), BigInt(50e18));
   const LearnWay = await ethers.getContractFactory("LearnWay");
@@ -58,14 +52,15 @@ export enum QuizState {
 describe("LearnWay and Faucet", function () {
   describe("Deployment", function () {
     it("Should Deploy LearnWay", async function () {
-      const {learnWay, learnWayToken, owner} = await loadFixture(deployLearnWay);
+      const { learnWay, learnWayToken, owner } = await loadFixture(
+        deployLearnWay
+      );
       expect(await learnWay.adminFeeBps()).to.equal(500);
       expect(await learnWay.entryFee()).to.equal(BigInt(50e18));
-      expect(await learnWay.maxQuizDuration()).to.equal(60*15);
+      expect(await learnWay.maxQuizDuration()).to.equal(60 * 15);
       expect(await learnWay.accumulatedFee()).to.equal(0);
       expect(await learnWay.feeAddress()).to.equal(await owner.getAddress());
       expect(await learnWay.lwt()).to.equal(await learnWayToken.getAddress());
-
     });
   });
 
@@ -121,6 +116,38 @@ describe("LearnWay and Faucet", function () {
         .to.emit(learnWay, "PartipantJoined")
         .withArgs(quizHash, QuizState.open, user3.address);
 
+      //revert already participant
+      await expect(
+        learnWay.connect(user3).joinQuiz(quizHash)
+      ).to.be.revertedWithCustomError(learnWay, "IsParticipant");
+
+      //total stakes
+      expect((await learnWay.quizzes(quizHash)).totalStake).to.equal(
+        BigInt(200e18)
+      );
+
+      //participants playing
+      expect(
+        (await learnWay.participants(quizHash, await owner.getAddress()))
+          .playing
+      ).to.be.true;
+      expect(
+        (await learnWay.participants(quizHash, await user1.getAddress()))
+          .playing
+      ).to.be.true;
+      expect(
+        (await learnWay.participants(quizHash, await user2.getAddress()))
+          .playing
+      ).to.be.true;
+      expect(
+        (await learnWay.participants(quizHash, await user3.getAddress()))
+          .playing
+      ).to.be.true;
+      expect(
+        (await learnWay.participants(quizHash, await user4.getAddress()))
+          .playing
+      ).to.be.false;
+
       //revert NotParticipant
       await expect(
         learnWay.connect(user4).startQuiz(quizHash)
@@ -140,8 +167,6 @@ describe("LearnWay and Faucet", function () {
         learnWay,
         "InvalidState"
       );
-
-
     });
   });
 });
