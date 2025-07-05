@@ -195,7 +195,8 @@ contract LearnWay is Initializable {
         existingQuiz(_quizHash)
         quizInState(_quizHash, QuizState.open)
         isParticipant(_quizHash, msg.sender)
-    {
+        //@audit Operator or any participant can startQuiz?
+   {
         quizzes[_quizHash].state = QuizState.ongoing;
         emit QuizStarted(_quizHash, quizzes[_quizHash].state, msg.sender);
     }
