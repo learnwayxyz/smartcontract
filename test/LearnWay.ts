@@ -13,8 +13,16 @@ export async function deployLearnWay() {
   const faucet = await LearnWayFaucet.deploy(learnWayToken);
 
   await learnWayToken.transfer(await faucet.getAddress(), BigInt(1e24));
-  await learnWayToken.transferFrom(await faucet.getAddress() , await user1.getAddress(), BigInt(50e18));
-  await learnWayToken.transferFrom(await faucet.getAddress(), await user2.getAddress(), BigInt(50e18));
+  await learnWayToken.transfer(
+    await user1.getAddress(),
+    BigInt(50e18)
+  );
+  
+  await learnWayToken.transfer(
+    await user2.getAddress(),
+    BigInt(50e18)
+  );
+
   await learnWayToken.transfer(await user3.getAddress(), BigInt(50e18));
   const LearnWay = await ethers.getContractFactory("LearnWay");
   const learnWay = await LearnWay.deploy();
@@ -82,17 +90,23 @@ describe("LearnWay and Faucet", function () {
         .withArgs(quizHash, QuizState.open, owner.address, BigInt(50e18));
 
       //join quiz
-      await learnWayToken.connect(user1).approve(await learnWay.getAddress(), BigInt(50e18));
+      await learnWayToken
+        .connect(user1)
+        .approve(await learnWay.getAddress(), BigInt(50e18));
       await expect(learnWay.connect(user1).joinQuiz(quizHash))
         .to.emit(learnWay, "PartipantJoined")
         .withArgs(quizHash, QuizState.open, user1.address);
 
-      await learnWayToken.connect(user2).approve(await learnWay.getAddress(), BigInt(50e18));
+      await learnWayToken
+        .connect(user2)
+        .approve(await learnWay.getAddress(), BigInt(50e18));
       await expect(learnWay.connect(user2).joinQuiz(quizHash))
         .to.emit(learnWay, "PartipantJoined")
         .withArgs(quizHash, QuizState.open, user2.address);
 
-      await learnWayToken.connect(user3).approve(await learnWay.getAddress(), BigInt(50e18));
+      await learnWayToken
+        .connect(user3)
+        .approve(await learnWay.getAddress(), BigInt(50e18));
       await expect(learnWay.connect(user3).joinQuiz(quizHash))
         .to.emit(learnWay, "PartipantJoined")
         .withArgs(quizHash, QuizState.open, user3.address);
