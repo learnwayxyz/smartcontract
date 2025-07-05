@@ -1,5 +1,8 @@
+import { zeroAddress } from './../node_modules/ethereumjs-util/src/account';
+import { bigint } from './../node_modules/micro-packed/src/index';
+import { LearnWay } from './../typechain-types/contracts/LearnWay';
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { expect } from "chai";
+import { assert, expect } from "chai";
 import { ethers } from "hardhat";
 
 export async function deployLearnWay() {
@@ -55,7 +58,14 @@ export enum QuizState {
 describe("LearnWay and Faucet", function () {
   describe("Deployment", function () {
     it("Should Deploy LearnWay", async function () {
-      await loadFixture(deployLearnWay);
+      const {learnWay, learnWayToken, owner} = await loadFixture(deployLearnWay);
+      expect(await learnWay.adminFeeBps()).to.equal(500);
+      expect(await learnWay.entryFee()).to.equal(BigInt(50e18));
+      expect(await learnWay.maxQuizDuration()).to.equal(60*15);
+      expect(await learnWay.accumulatedFee()).to.equal(0);
+      expect(await learnWay.feeAddress()).to.equal(await owner.getAddress());
+      expect(await learnWay.lwt()).to.equal(await learnWayToken.getAddress());
+
     });
   });
 
@@ -130,6 +140,8 @@ describe("LearnWay and Faucet", function () {
         learnWay,
         "InvalidState"
       );
+
+
     });
   });
 });
