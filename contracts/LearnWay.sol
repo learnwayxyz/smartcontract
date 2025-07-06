@@ -195,8 +195,8 @@ contract LearnWay is Initializable {
         existingQuiz(_quizHash)
         quizInState(_quizHash, QuizState.open)
         isParticipant(_quizHash, msg.sender)
-        //@audit Operator or any participant can startQuiz?
-   {
+    //@audit Operator or any participant can startQuiz?
+    {
         quizzes[_quizHash].state = QuizState.ongoing;
         emit QuizStarted(_quizHash, quizzes[_quizHash].state, msg.sender);
     }
@@ -245,7 +245,7 @@ contract LearnWay is Initializable {
         participants[_quizHash][msg.sender].score = _score;
         if (_score > quizzes[_quizHash].highestScore) {
             quizzes[_quizHash].highestScore = _score;
-            quizzes[_quizHash].topScorer = msg.sender;
+            quizzes[_quizHash].topScorer = msg.sender; //@audit what if multiple participants have same highest score?
         }
         emit PartipantEvaluated(
             _quizHash,
