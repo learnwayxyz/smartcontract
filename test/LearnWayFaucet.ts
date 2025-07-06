@@ -1,10 +1,6 @@
-import {
-  time,
-  loadFixture
-} from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import LearnWayFaucetModule from "../ignition/modules/LearnWayFaucet";
 
 export async function deployLearnWayFaucet() {
   const [owner, otherAccount] = await ethers.getSigners();
@@ -38,8 +34,8 @@ describe("LearnWayFaucet", function () {
       ).revertedWithCustomError(faucet, "AlreadyClaimed");
     });
 
-    it("Should set daily claim", async function() {
-      const {faucet, otherAccount} = await loadFixture(deployLearnWayFaucet);
+    it("Should set daily claim", async function () {
+      const { faucet, otherAccount } = await loadFixture(deployLearnWayFaucet);
 
       await expect(faucet.setDailyClaim(BigInt(100e18))).to.not.be.reverted;
       expect(await faucet.dailyClaim()).to.be.equal(BigInt(100e18));
@@ -47,10 +43,12 @@ describe("LearnWayFaucet", function () {
       await expect(
         faucet.connect(otherAccount).setDailyClaim(BigInt(100e18))
       ).to.be.revertedWithCustomError(faucet, "OwnableUnauthorizedAccount");
-    })
+    });
 
-    it("Should drain", async function() {
-      const {faucet, otherAccount, learnWay} = await loadFixture(deployLearnWayFaucet);
+    it("Should drain", async function () {
+      const { faucet, otherAccount, learnWay } = await loadFixture(
+        deployLearnWayFaucet
+      );
 
       const balanceBefore = await learnWay.balanceOf(await faucet.getAddress());
 
@@ -58,12 +56,11 @@ describe("LearnWayFaucet", function () {
         faucet.connect(otherAccount).drain()
       ).to.be.revertedWithCustomError(faucet, "OwnableUnauthorizedAccount");
 
-      await expect(faucet.drain()).to.not.be.reverted; 
+      await expect(faucet.drain()).to.not.be.reverted;
 
       const balanceAfter = await learnWay.balanceOf(await faucet.getAddress());
       expect(balanceAfter).to.be.lessThan(balanceBefore);
-      expect(balanceAfter).to.be.equal(0); 
+      expect(balanceAfter).to.be.equal(0);
     });
-
   });
 });
