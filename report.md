@@ -8,6 +8,9 @@
 	- [Files Summary](#files-summary)
 	- [Files Details](#files-details)
 	- [Issue Summary](#issue-summary)
+- [High Issues](#high-issues)
+	- [H-1: Any Participant Can Start Quiz Instead of Operator](#h-1-any-participant-can-start-quiz-instead-of-operator)
+	- [H-2: Other Participants With Same Highscore Cannot Win Rewards](#h-2-other-participants-with-same-highscore-cannot-win-rewards)
 - [Low Issues](#low-issues)
 	- [L-1: Centralization Risk for trusted owners](#l-1-centralization-risk-for-trusted-owners)
 	- [L-2: Solidity pragma should be specific, not wide](#l-2-solidity-pragma-should-be-specific-not-wide)
@@ -49,9 +52,52 @@
 
 | Category | No. of Issues |
 | --- | --- |
-| High | 0 |
+| High | 2 |
 | Low | 14 |
 
+# High Issues
+
+## H-1: Any Participant Can Start Quiz Instead of Operator
+
+Any Participant of a quiz can invoke the `startQuiz` function and cause a state change. 
+
+<details><summary>1 Found Instance</summary>
+
+- Found in contracts/LearnWay.sol [Line: 197](contracts/LearnWay.sol#L197)
+
+	```solidity
+	  function startQuiz(
+        bytes32 _quizHash
+    )
+        external
+        existingQuiz(_quizHash)
+        quizInState(_quizHash, QuizState.open)
+        isParticipant(_quizHash, msg.sender)
+	```
+
+- PoC found in test/LearnWayFaucet.ts [Line: 77](test/LearnWayFaucet.ts#L77)
+
+</details>
+
+## H-2: Other Participants With Same Highscore Cannot Win Rewards
+
+If multiple participants with same high scores are submitted, only the first high score submission is eligible for winning rewards. This makes it unfair to other particpants with same high score.
+
+<details><summary>Found 1 Instance</summary>
+
+- Found in contracts/LearnWay.sol [Line: 248](contracts/LearnWay.sol#248)
+
+	```solidity
+	 if (_score > quizzes[_quizHash].highestScore) {
+            quizzes[_quizHash].highestScore = _score;
+            quizzes[_quizHash].topScorer = msg.sender;
+        }
+	```
+
+- PoC found in test/LearnWayFaucet.ts [Line: 110](test/LearnWayFaucet.ts#110)
+
+</details>
+<br>
 
 # Low Issues
 
